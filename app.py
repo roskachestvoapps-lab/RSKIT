@@ -339,17 +339,32 @@ def run_playwright_token_update() -> bool:
     for attempt in range(2):
         try:
             with sync_playwright() as p:
-                launch_kwargs = {"headless": True}
+                launch_kwargs = {
+                    "headless": True,
+                    "args": [
+                        "--disable-blink-features=AutomationControlled",
+                        "--no-sandbox",
+                        "--disable-setuid-sandbox"
+                    ]
+                }
                 if proxy:
                     launch_kwargs["proxy"] = {"server": proxy}
                 browser = p.chromium.launch(**launch_kwargs)
                 context = browser.new_context(
-                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    viewport={"width": 1280, "height": 800}
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                    viewport={"width": 1366, "height": 768},
+                    locale="ru-RU",
+                    timezone_id="Europe/Moscow"
                 )
                 page = context.new_page()
                 
-                page.goto(url, wait_until="load", timeout=60000)
+                # Маскируем автоматизацию/webdriver
+                page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                
+                log_message(f"Playwright: Переход на {url}...")
+                response = page.goto(url, wait_until="load", timeout=60000)
+                status = response.status if response else "N/A"
+                log_message(f"Playwright: Страница загружена. HTTP статус: {status}")
                 
                 # Динамически ожидаем появления токена в localStorage и куки session-cookie
                 token = None
