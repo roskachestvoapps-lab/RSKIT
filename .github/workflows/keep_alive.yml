@@ -1,15 +1,23 @@
-name: Keep Streamlit App Awake
+name: Keep Streamlit Alive
 
 on:
   schedule:
-    # Запускать каждые 12 часов (дважды в день) для предотвращения засыпания
-    - cron: '0 */12 * * *'
-  workflow_dispatch: # Позволяет запускать вручную из вкладки Actions на GitHub
+    # Запуск каждый день в 00:00 UTC (03:00 МСК)
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Позволяет запускать скрипт вручную кнопкой
 
 jobs:
-  ping:
+  keep-alive:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Даем права на запись для создания коммита в репозиторий
     steps:
-      - name: Ping Streamlit App
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Make empty commit
         run: |
-          curl -s -L -I "https://roskachestvoit.streamlit.app/" | head -n 1
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "Chore: Keep-alive ping to reset Streamlit timeout"
+          git push
