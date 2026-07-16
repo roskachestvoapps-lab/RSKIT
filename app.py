@@ -557,6 +557,9 @@ class FSAparser:
         if not certificates:
             return None
         
+        # Сортируем сырые сертификаты по ID по убыванию, чтобы порядок на всех листах совпадал
+        certificates = sorted(certificates, key=lambda x: x.get("id", 0), reverse=True)
+        
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         excel_filename = f"certificates_{timestamp}.xlsx"
         json_filename = f"certificates_raw_{timestamp}.json"
@@ -571,12 +574,63 @@ class FSAparser:
             
         # Форматируем и сохраняем Excel
         try:
+            # 1. Полная выгрузка (Лист 1)
             flat_data = [self.flatten_certificate(c) for c in certificates]
             df = pd.DataFrame(flat_data)
-            df = df.sort_values('id', ascending=False)
+            
+            # 2. Для руководителя (Лист 2)
+            STATUS_NAMES = {
+                1: "Черновик",
+                2: "Аннулирован",
+                3: "Приостановлен",
+                4: "Продлен",
+                5: "Архивный",
+                6: "Действует",
+                7: "Прекращен"
+            }
+            
+            def format_date(date_str: str) -> str:
+                if not date_str:
+                    return ""
+                try:
+                    if len(date_str) >= 10:
+                        if "-" in date_str[:10]:
+                            parts = date_str[:10].split("-")
+                            if len(parts[0]) == 4:
+                                return f"{parts[2]}.{parts[1]}.{parts[0]}"
+                            return f"{parts[0]}.{parts[1]}.{parts[2]}"
+                except Exception:
+                    pass
+                return date_str
+
+            adapted_data = []
+            for c in certificates:
+                flat = self.flatten_certificate(c)
+                sds_sign = c.get("sdsSign") or c.get("signSds") or c.get("systemSign") or c.get("sdsSignLabel") or ""
+                reg_date = flat.get("certSendDate") or flat.get("certCreateDate") or ""
+                
+                row = {
+                    "Статус сертификата": STATUS_NAMES.get(flat.get("idStatus"), f"Код {flat.get('idStatus')}"),
+                    "Номер сертификата": flat.get("numberCertificate", ""),
+                    "Дата регистрации сертификата в системе": format_date(reg_date),
+                    "Дата окончания действия сертификата": format_date(flat.get("certEndDate", "")),
+                    "Знак системы": sds_sign,
+                    "Номер системы": flat.get("sdsNumber") or "",
+                    "Наименование системы": flat.get("sdsName") or "",
+                    "Общее наименование продукции": flat.get("fullNameProduct", ""),
+                    "Заявитель": flat.get("fullNameApplicant", ""),
+                    "ИНН Заявителя": flat.get("innApplicant", ""),
+                    "Изготовитель": flat.get("fullNameManufacturer", ""),
+                    "ИНН Изготовителя": flat.get("innManufacturer", ""),
+                    "Номер записи в РАЛ органа по сертификации": flat.get("attestatRegNumber", "")
+                }
+                adapted_data.append(row)
+                
+            df_adapted = pd.DataFrame(adapted_data)
             
             with pd.ExcelWriter(excel_filename, engine='openpyxl') as writer:
-                df.to_excel(writer, sheet_name='Сертификаты', index=False)
+                df.to_excel(writer, sheet_name='Полная выгрузка', index=False)
+                df_adapted.to_excel(writer, sheet_name='Для руководителя', index=False)
                 
                 stats = pd.DataFrame({
                     'Показатель': [
