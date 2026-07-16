@@ -84,7 +84,8 @@ DEFAULT_CONFIG = {
 <br>
 {table_html}
 <br>
-<p><i>Отчет сформирован автоматически.</i></p>"""
+<p><i>Отчет сформирован автоматически.</i></p>""",
+    "proxy": ""
 }
 
 def load_config() -> dict:
@@ -175,10 +176,16 @@ def run_playwright_token_update() -> bool:
     log_message("Запуск Playwright для обновления токена...")
     url = "https://pub.fsa.gov.ru/rsds/products"
     
+    config = load_config()
+    proxy = config.get("proxy", "")
+    
     for attempt in range(2):
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
+                launch_kwargs = {"headless": True}
+                if proxy:
+                    launch_kwargs["proxy"] = {"server": proxy}
+                browser = p.chromium.launch(**launch_kwargs)
                 context = browser.new_context(
                     user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     viewport={"width": 1280, "height": 800}
@@ -266,6 +273,14 @@ class FSAparser:
         self.session.headers.update(self.headers)
         if self.cookies:
             self.session.cookies.update(self.cookies)
+            
+        config = load_config()
+        proxy = config.get("proxy", "")
+        if proxy:
+            self.session.proxies = {
+                "http": proxy,
+                "https": proxy
+            }
             
     def test_connection(self) -> bool:
         payload = self.base_payload.copy()
@@ -946,6 +961,7 @@ with tab_settings:
         auto_update = st.checkbox("Включить автообновление токена (Playwright в указанное время)", value=config.get("auto_update_token", True))
         token_time = st.text_input("Время автообновления токена (МСК, HH:MM)", value=config.get("token_update_time_msk", "02:00"))
         auto_parse = st.checkbox("Автоматически парсить сертификаты после обновления токена", value=config.get("auto_run_parser", True))
+        proxy_val = st.text_input("HTTP/HTTPS Прокси (например, http://ip:port или http://user:pass@ip:port)", value=config.get("proxy", ""))
         
     with col_auth2:
         st.info("💡 **Как работает автообновление:** Приложение использует библиотеку Playwright для симуляции захода пользователя на страницу реестра. Сессионные куки и токен вытаскиваются из localStorage автоматически раз в сутки в указанное время МСК.")
@@ -999,6 +1015,7 @@ with tab_settings:
         config["auto_update_token"] = auto_update
         config["token_update_time_msk"] = token_time
         config["auto_run_parser"] = auto_parse
+        config["proxy"] = proxy_val
         config["smtp_sender"] = smtp_sender
         config["smtp_password"] = smtp_password
         config["admin_email"] = admin_email
