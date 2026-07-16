@@ -100,6 +100,32 @@ def is_port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(('127.0.0.1', port)) == 0
 
+def test_proxy_health(port: int) -> bool:
+    try:
+        import requests
+        proxies = {
+            "http": f"http://127.0.0.1:{port}",
+            "https": f"http://127.0.0.1:{port}"
+        }
+        # Проверяем легкий эндпоинт с тайм-аутом в 3 секунды
+        r = requests.get("https://api.ipify.org?format=json", proxies=proxies, timeout=3.0)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+def kill_existing_xray():
+    import subprocess
+    import platform
+    sys_name = platform.system().lower()
+    log_message("Очистка зависших процессов Xray...")
+    try:
+        if sys_name == "windows":
+            subprocess.run(["taskkill", "/f", "/im", "xray.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            subprocess.run(["pkill", "-9", "-f", "xray"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:
+        log_message(f"Не удалось принудительно остановить Xray: {e}", "warning")
+
 def start_xray_proxy() -> bool:
     config = load_config()
     if not config.get("use_xray_proxy"):
@@ -121,8 +147,15 @@ def start_xray_proxy() -> bool:
         log_message(f"Не удалось распарсить порт из config: {e}", "warning")
 
     if is_port_in_use(port):
-        log_message(f"Xray прокси уже активен на порту {port}.")
-        return True
+        if test_proxy_health(port):
+            return True
+        else:
+            log_message(f"Порт {port} занят, но прокси не пропускает трафик. Перезапуск...")
+            kill_existing_xray()
+            time.sleep(1)
+    else:
+        # Для профилактики очищаем старые процессы
+        kill_existing_xray()
 
     log_message("Запуск Xray прокси для обхода геоблокировок...")
     
