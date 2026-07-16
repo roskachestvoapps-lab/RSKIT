@@ -291,9 +291,16 @@ def send_email(to_email: str, subject: str, body: str, attachment_path: str = No
                 attach.add_header('Content-Disposition', 'attachment', filename=filename)
                 msg.attach(attach)
                 
-        # Подключаемся к Gmail SMTP
-        server = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=20)
-        server.login(sender, password)
+        # Подключаемся к Gmail SMTP с поддержкой SSL (465) и резервным TLS (587)
+        try:
+            server = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=15)
+            server.login(sender, password)
+        except Exception as ssl_err:
+            log_message(f"Подключение через SSL (порт 465) не удалось: {ssl_err}. Пробуем резервный TLS (порт 587)...", "warning")
+            server = smtplib.SMTP('smtp.gmail.com', 587, timeout=15)
+            server.starttls()
+            server.login(sender, password)
+            
         server.sendmail(sender, [to_email], msg.as_string())
         server.close()
         log_message(f"Письмо успешно отправлено на {to_email} с темой '{subject}'")
