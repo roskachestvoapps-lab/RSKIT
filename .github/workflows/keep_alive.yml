@@ -1,0 +1,15 @@
+name: Keep Streamlit App Awake
+
+on:
+  schedule:
+    # Запускать каждые 12 часов (дважды в день) для предотвращения засыпания
+    - cron: '0 */12 * * *'
+  workflow_dispatch: # Позволяет запускать вручную из вкладки Actions на GitHub
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Streamlit App
+        run: |
+          curl -s -L -I "https://roskachestvoit.streamlit.app/" | head -n 1
