@@ -930,6 +930,11 @@ def start_scheduler():
     return True
 
 start_scheduler()
+try:
+    start_xray_proxy()
+except Exception as e:
+    log_message(f"Ошибка запуска Xray прокси на верхнем уровне: {e}", "error")
+
 
 # ----------------- WEB ИНТЕРФЕЙС STREAMLIT -----------------
 
