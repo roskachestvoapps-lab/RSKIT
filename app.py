@@ -236,7 +236,12 @@ def load_config() -> dict:
                         else:
                             config[k] = dict(val)
                     except Exception as e:
-                        log_message(f"Ошибка разбора словаря {k} из секретов: {e}. Значение типа {type(val)}: {repr(val)[:200]}", "warning")
+                        if isinstance(val, str):
+                            lines_str = [f"{i+1:03d}: {line}" for i, line in enumerate(val.split('\n'))]
+                            full_lines = "\n".join(lines_str)
+                            log_message(f"Ошибка разбора словаря {k} из секретов: {e}.\nСодержимое конфигурации:\n{full_lines}", "warning")
+                        else:
+                            log_message(f"Ошибка разбора словаря {k} из секретов: {e}. Тип: {type(val)}", "warning")
                 else:
                     config[k] = st.secrets[k]
     except Exception:
