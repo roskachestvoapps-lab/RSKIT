@@ -349,13 +349,45 @@ def run_playwright_token_update() -> bool:
                 )
                 page = context.new_page()
                 
-                page.goto(url, wait_until="networkidle", timeout=60000)
-                time.sleep(5)
+                page.goto(url, wait_until="load", timeout=60000)
                 
-                token = page.evaluate("() => localStorage.getItem('fgis_token')")
+                # Динамически ожидаем появления токена в localStorage и куки session-cookie
+                token = None
+                cookies_dict = {}
                 
-                playwright_cookies = context.cookies()
-                cookies_dict = {c['name']: c['value'] for c in playwright_cookies}
+                for i in range(35):
+                    if not token:
+                        try:
+                            token = page.evaluate("() => localStorage.getItem('fgis_token')")
+                        except Exception:
+                            pass
+                    
+                    try:
+                        playwright_cookies = context.cookies()
+                        current_cookies = {c['name']: c['value'] for c in playwright_cookies}
+                        if 'session-cookie' in current_cookies:
+                            cookies_dict = current_cookies
+                    except Exception:
+                        pass
+                        
+                    if token and 'session-cookie' in cookies_dict:
+                        log_message(f"Токен и кука session-cookie успешно найдены в браузере (секунда {i+1}).")
+                        break
+                        
+                    time.sleep(1)
+                
+                # Резервная попытка получить то, что успело загрузиться
+                if not token:
+                    try:
+                        token = page.evaluate("() => localStorage.getItem('fgis_token')")
+                    except Exception:
+                        pass
+                if not cookies_dict:
+                    try:
+                        playwright_cookies = context.cookies()
+                        cookies_dict = {c['name']: c['value'] for c in playwright_cookies}
+                    except Exception:
+                        pass
                 
                 browser.close()
                 
@@ -363,6 +395,8 @@ def run_playwright_token_update() -> bool:
                     config = load_config()
                     config["fgis_token"] = token
                     if cookies_dict:
+                        if "cookies" not in config or not isinstance(config["cookies"], dict):
+                            config["cookies"] = {}
                         for k, v in cookies_dict.items():
                             config["cookies"][k] = v
                     save_config(config)
