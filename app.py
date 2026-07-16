@@ -363,6 +363,10 @@ def run_playwright_token_update() -> bool:
                 )
                 page = context.new_page()
                 
+                # Собираем ошибки и предупреждения консоли для диагностики
+                console_msgs = []
+                page.on("console", lambda msg: console_msgs.append(f"[{msg.type}] {msg.text}") if msg.type in ("error", "warning") else None)
+                
                 # Маскируем автоматизацию/webdriver
                 page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
                 
@@ -420,6 +424,23 @@ def run_playwright_token_update() -> bool:
                         cookies_dict = {c['name']: c['value'] for c in playwright_cookies}
                     except Exception:
                         pass
+                
+                # Если токен не найден, собираем диагностическую информацию перед закрытием
+                if not token:
+                    try:
+                        title = page.title()
+                        keys = page.evaluate("() => Object.keys(localStorage)")
+                        log_message(f"Playwright диагностика: Заголовок страницы: '{title}'. Ключи localStorage: {keys}", "warning")
+                        if console_msgs:
+                            useful_logs = [l for l in console_msgs if "yandex" not in l and "mc.yandex.ru" not in l]
+                            if useful_logs:
+                                errors_str = "\n".join(useful_logs[-15:])
+                                log_message(f"Полезные ошибки консоли:\n{errors_str}", "warning")
+                            else:
+                                errors_str = "\n".join(console_msgs[-10:])
+                                log_message(f"Все ошибки консоли (включая метрики):\n{errors_str}", "warning")
+                    except Exception as diag_err:
+                        log_message(f"Ошибка сбора диагностики Playwright: {diag_err}", "warning")
                 
                 browser.close()
                 
