@@ -68,6 +68,7 @@ DEFAULT_CONFIG = {
         "session-cookie": "18c2b3c6967397ee9641add9e59e4e02cecaf59bea6885b61fbf45cf6a5fff7ccb5761fee5e852713d65d1e42ce90ff5"
     },
     "auto_update_token": True,
+    "app_password": "",
     "token_update_time_msk": "02:00",
     "smtp_sender": "roskachestvo.apps@gmail.com",
     "smtp_password": "",
@@ -1141,10 +1142,47 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+config = load_config()
+
+def check_password(config) -> bool:
+    """Возвращает True, если пароль верен или не задан."""
+    correct_password = config.get("app_password", "").strip()
+    if not correct_password:
+        return True
+
+    # Проверяем, совпадает ли пароль из Secrets (если там есть)
+    if "password_correct" not in st.session_state:
+        st.session_state["password_correct"] = False
+
+    if st.session_state["password_correct"]:
+        return True
+
+    # Красивое окно авторизации в стиле Роскачества
+    st.markdown("""
+    <div style="text-align: center; margin-top: 100px; margin-bottom: 20px;">
+        <h2 style="font-family: Arial, sans-serif; color: #2563EB;">🔒 Панель управления ФГИС ФСА</h2>
+        <p style="font-family: Arial, sans-serif; color: #666;">Пожалуйста, введите пароль для получения доступа</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        password = st.text_input("Введите пароль доступа:", type="password", key="login_password_input")
+        if st.button("Войти в систему", type="primary", use_container_width=True):
+            if password == correct_password:
+                st.session_state["password_correct"] = True
+                st.rerun()
+            else:
+                st.error("❌ Неверный пароль!")
+                
+    return False
+
+# Проверяем пароль перед доступом ко всему приложению
+if not check_password(config):
+    st.stop()
+
 st.title("📊 Автоматизация импорта сертификатов ФГИС ФСА")
 st.write("Система автообновления авторизации, парсинга реестра соответствия и email-оповещения.")
-
-config = load_config()
 
 with st.sidebar:
     st.header("⚙️ Статус Системы")
@@ -1283,6 +1321,7 @@ with tab_settings:
         auto_update = st.checkbox("Включить автообновление токена (Playwright в указанное время)", value=config.get("auto_update_token", True))
         token_time = st.text_input("Время автообновления токена (МСК, HH:MM)", value=config.get("token_update_time_msk", "02:00"))
         auto_parse = st.checkbox("Автоматически парсить сертификаты после обновления токена", value=config.get("auto_run_parser", True))
+        app_password_val = st.text_input("Пароль доступа к панели управления (оставьте пустым для отключения)", value=config.get("app_password", ""), type="password")
         proxy_val = st.text_input("HTTP/HTTPS Прокси (например, http://ip:port или http://user:pass@ip:port)", value=config.get("proxy", ""))
         
         st.markdown("##### Встроенный Xray (VLESS Reality)")
@@ -1341,6 +1380,7 @@ with tab_settings:
         config["auto_update_token"] = auto_update
         config["token_update_time_msk"] = token_time
         config["auto_run_parser"] = auto_parse
+        config["app_password"] = app_password_val
         config["proxy"] = proxy_val
         
         try:
