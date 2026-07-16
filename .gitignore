@@ -33,3 +33,7 @@ certificates_raw_*.json
 # Временные файлы
 импорт сертов
 
+# Ключи и настройки VPN
+aleinik/
+
+
