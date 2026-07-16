@@ -228,11 +228,13 @@ def load_config() -> dict:
     try:
         for k in DEFAULT_CONFIG.keys():
             if k in st.secrets:
-                # Если в secrets лежит структура данных, st.secrets возвращает специальный dict-like объект
                 if isinstance(DEFAULT_CONFIG[k], dict):
-                    # Если это словарь (например cookies), пробуем распарсить или сконвертировать
                     try:
-                        config[k] = dict(st.secrets[k])
+                        val = st.secrets[k]
+                        if isinstance(val, str):
+                            config[k] = json.loads(val)
+                        else:
+                            config[k] = dict(val)
                     except Exception:
                         pass
                 else:
