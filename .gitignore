@@ -36,4 +36,11 @@ certificates_raw_*.json
 # Ключи и настройки VPN
 aleinik/
 
+# Xray бинарники и временные файлы
+xray
+xray.zip
+xray_*.json
+geo*.dat
+
+
 
