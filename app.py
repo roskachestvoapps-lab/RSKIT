@@ -14,6 +14,10 @@ from email.mime.application import MIMEApplication
 from typing import List, Dict
 from playwright.sync_api import sync_playwright
 import glob
+import socket
+import platform
+import zipfile
+
 
 # Настройка логирования
 LOG_FILE = "app.log"
@@ -85,8 +89,114 @@ DEFAULT_CONFIG = {
 {table_html}
 <br>
 <p><i>Отчет сформирован автоматически.</i></p>""",
-    "proxy": ""
+    "proxy": "",
+    "use_xray_proxy": False,
+    "xray_config": {}
 }
+
+def is_port_in_use(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('127.0.0.1', port)) == 0
+
+def start_xray_proxy() -> bool:
+    config = load_config()
+    if not config.get("use_xray_proxy"):
+        return False
+        
+    xray_cfg = config.get("xray_config")
+    if not xray_cfg:
+        log_message("Xray прокси включен, но xray_config пустой.", "warning")
+        return False
+        
+    port = 10809
+    try:
+        if isinstance(xray_cfg, dict) and "inbounds" in xray_cfg:
+            for inbound in xray_cfg["inbounds"]:
+                if inbound.get("protocol") == "http":
+                    port = inbound.get("port", port)
+                    break
+    except Exception as e:
+        log_message(f"Не удалось распарсить порт из config: {e}", "warning")
+
+    if is_port_in_use(port):
+        log_message(f"Xray прокси уже активен на порту {port}.")
+        return True
+
+    log_message("Запуск Xray прокси для обхода геоблокировок...")
+    
+    sys_name = platform.system().lower()
+    arch = platform.machine().lower()
+    
+    os_name = "linux" if sys_name == "linux" else "macos"
+    if "arm" in arch or "aarch64" in arch:
+        arch_suffix = "arm64-v8a"
+    else:
+        arch_suffix = "64"
+        
+    binary_name = "xray"
+    if sys_name == "windows":
+        binary_name = "xray.exe"
+        filename = f"Xray-windows-{arch_suffix}.zip"
+    else:
+        filename = f"Xray-{os_name}-{arch_suffix}.zip"
+        
+    binary_path = os.path.abspath(binary_name)
+    
+    if not os.path.exists(binary_path):
+        XRAY_VERSION = "26.3.27"
+        url = f"https://github.com/XTLS/Xray-core/releases/download/v{XRAY_VERSION}/{filename}"
+        log_message(f"Скачивание бинарного файла Xray с {url}...")
+        try:
+            r = requests.get(url, stream=True, timeout=30)
+            if r.status_code != 200:
+                log_message(f"Не удалось скачать Xray: статус {r.status_code}", "error")
+                return False
+                
+            zip_path = "xray.zip"
+            with open(zip_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    
+            log_message("Распаковка Xray...")
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                zip_ref.extractall(".")
+                
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+                
+            if sys_name != "windows" and os.path.exists(binary_path):
+                os.chmod(binary_path, 0o755)
+        except Exception as e:
+            log_message(f"Ошибка при скачивании или распаковке Xray: {e}", "error")
+            return False
+            
+    if not os.path.exists(binary_path):
+        log_message("Бинарный файл Xray не найден после скачивания.", "error")
+        return False
+        
+    config_file = "xray_config_run.json"
+    try:
+        with open(config_file, "w", encoding="utf-8") as f:
+            json.dump(xray_cfg, f, indent=2)
+    except Exception as e:
+        log_message(f"Не удалось сохранить конфиг Xray: {e}", "error")
+        return False
+        
+    try:
+        log_out = open("xray_run.log", "w", encoding="utf-8")
+        subprocess.Popen(
+            [binary_path, "-config", config_file],
+            stdout=log_out,
+            stderr=subprocess.STDOUT,
+            close_fds=True
+        )
+        time.sleep(3)
+        log_message(f"Процесс Xray успешно запущен на порту {port}.")
+        return True
+    except Exception as e:
+        log_message(f"Не удалось запустить Xray: {e}", "error")
+        return False
+
 
 def load_config() -> dict:
     config = DEFAULT_CONFIG.copy()
@@ -178,7 +288,19 @@ def run_playwright_token_update() -> bool:
     
     config = load_config()
     proxy = config.get("proxy", "")
-    
+    if config.get("use_xray_proxy"):
+        xray_port = 10809
+        try:
+            xray_cfg = config.get("xray_config", {})
+            if isinstance(xray_cfg, dict) and "inbounds" in xray_cfg:
+                for inbound in xray_cfg["inbounds"]:
+                    if inbound.get("protocol") == "http":
+                        xray_port = inbound.get("port", xray_port)
+                        break
+        except:
+            pass
+        proxy = f"http://127.0.0.1:{xray_port}"
+        
     for attempt in range(2):
         try:
             with sync_playwright() as p:
@@ -276,6 +398,19 @@ class FSAparser:
             
         config = load_config()
         proxy = config.get("proxy", "")
+        if config.get("use_xray_proxy"):
+            xray_port = 10809
+            try:
+                xray_cfg = config.get("xray_config", {})
+                if isinstance(xray_cfg, dict) and "inbounds" in xray_cfg:
+                    for inbound in xray_cfg["inbounds"]:
+                        if inbound.get("protocol") == "http":
+                            xray_port = inbound.get("port", xray_port)
+                            break
+            except:
+                pass
+            proxy = f"http://127.0.0.1:{xray_port}"
+            
         if proxy:
             self.session.proxies = {
                 "http": proxy,
@@ -772,6 +907,12 @@ def start_scheduler():
     log_message("Инициализация глобального планировщика в Streamlit...")
     thread = threading.Thread(target=scheduler_worker, daemon=True)
     thread.start()
+    
+    try:
+        start_xray_proxy()
+    except Exception as e:
+        log_message(f"Ошибка автоматического запуска Xray прокси: {e}", "error")
+        
     return True
 
 start_scheduler()
@@ -963,6 +1104,10 @@ with tab_settings:
         auto_parse = st.checkbox("Автоматически парсить сертификаты после обновления токена", value=config.get("auto_run_parser", True))
         proxy_val = st.text_input("HTTP/HTTPS Прокси (например, http://ip:port или http://user:pass@ip:port)", value=config.get("proxy", ""))
         
+        st.markdown("##### Встроенный Xray (VLESS Reality)")
+        use_xray = st.checkbox("Использовать встроенный Xray прокси", value=config.get("use_xray_proxy", False))
+        xray_json = st.text_area("Конфигурация Xray (JSON)", value=json.dumps(config.get("xray_config", {}), ensure_ascii=False, indent=2), height=150)
+        
     with col_auth2:
         st.info("💡 **Как работает автообновление:** Приложение использует библиотеку Playwright для симуляции захода пользователя на страницу реестра. Сессионные куки и токен вытаскиваются из localStorage автоматически раз в сутки в указанное время МСК.")
         
@@ -1016,6 +1161,16 @@ with tab_settings:
         config["token_update_time_msk"] = token_time
         config["auto_run_parser"] = auto_parse
         config["proxy"] = proxy_val
+        
+        try:
+            parsed_xray = json.loads(xray_json)
+        except Exception as e:
+            st.error(f"Ошибка в формате JSON Xray: {e}")
+            parsed_xray = config.get("xray_config", {})
+            
+        config["use_xray_proxy"] = use_xray
+        config["xray_config"] = parsed_xray
+        
         config["smtp_sender"] = smtp_sender
         config["smtp_password"] = smtp_password
         config["admin_email"] = admin_email
@@ -1027,6 +1182,11 @@ with tab_settings:
         config["email_body_boss"] = body_boss
         
         save_config(config)
+        
+        if use_xray:
+            with st.spinner("Запуск Xray прокси..."):
+                start_xray_proxy()
+                
         st.success("Все настройки успешно сохранены и применены!")
         st.rerun()
 
