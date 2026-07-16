@@ -229,9 +229,13 @@ def load_config() -> dict:
     try:
         for k in DEFAULT_CONFIG.keys():
             if k in st.secrets:
+                val = st.secrets[k]
+                # Пропускаем стандартные заглушки/плейсхолдеры, чтобы они не перебивали настройки из веб-интерфейса
+                if isinstance(val, str) and ("ВАШ_" in val or "example.com" in val):
+                    continue
+                    
                 if isinstance(DEFAULT_CONFIG[k], dict):
                     try:
-                        val = st.secrets[k]
                         if isinstance(val, str):
                             config[k] = json.loads(val)
                         else:
@@ -243,8 +247,10 @@ def load_config() -> dict:
                             log_message(f"Ошибка разбора словаря {k} из секретов: {e}.\nСодержимое конфигурации:\n{full_lines}", "warning")
                         else:
                             log_message(f"Ошибка разбора словаря {k} из секретов: {e}. Тип: {type(val)}", "warning")
+                    except Exception:
+                        pass
                 else:
-                    config[k] = st.secrets[k]
+                    config[k] = val
     except Exception:
         pass # Игнорируем ошибки, если st.secrets не инициализирован (локальный запуск)
         
