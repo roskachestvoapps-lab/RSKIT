@@ -174,23 +174,37 @@ def start_xray_proxy() -> bool:
         log_message("Бинарный файл Xray не найден после скачивания.", "error")
         return False
         
+    import copy
     config_file = "xray_config_run.json"
     try:
+        xray_cfg_clean = copy.deepcopy(xray_cfg)
+        if isinstance(xray_cfg_clean, dict) and "log" in xray_cfg_clean:
+            del xray_cfg_clean["log"]
+            
         with open(config_file, "w", encoding="utf-8") as f:
-            json.dump(xray_cfg, f, indent=2)
+            json.dump(xray_cfg_clean, f, indent=2)
     except Exception as e:
         log_message(f"Не удалось сохранить конфиг Xray: {e}", "error")
         return False
         
     try:
         log_out = open("xray_run.log", "w", encoding="utf-8")
-        subprocess.Popen(
+        proc = subprocess.Popen(
             [binary_path, "-config", config_file],
             stdout=log_out,
             stderr=subprocess.STDOUT,
             close_fds=True
         )
         time.sleep(3)
+        
+        if not is_port_in_use(port):
+            log_message("Ошибка: Xray запущен, но порт не отвечает. Проверяем логи...", "error")
+            if os.path.exists("xray_run.log"):
+                with open("xray_run.log", "r", encoding="utf-8") as lf:
+                    content = lf.read()
+                    log_message(f"Логи Xray:\n{content}", "error")
+            return False
+            
         log_message(f"Процесс Xray успешно запущен на порту {port}.")
         return True
     except Exception as e:
