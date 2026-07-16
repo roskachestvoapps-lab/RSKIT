@@ -1,0 +1,35 @@
+# Python виртуальное окружение
+.venv/
+venv/
+ENV/
+env/
+
+# Кэш Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Файлы конфигурации и логи приложения (секреты!)
+config.json
+app.log
+
+# Выгрузки сертификатов (персональные данные и результаты работы)
+certificates_*.xlsx
+certificates_raw_*.json
+~$*.xlsx
+*.xlsx
+*.json
+
+# Настройки IDE
+.idea/
+.vscode/
+.DS_Store
+
+# Системные папки ИИ-агентов
+.agents/
+.claude/
+.gemini/
+
+# Временные файлы
+импорт сертов
+
