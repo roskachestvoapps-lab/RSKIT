@@ -354,17 +354,34 @@ def run_playwright_token_update() -> bool:
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
                     viewport={"width": 1366, "height": 768},
                     locale="ru-RU",
-                    timezone_id="Europe/Moscow"
+                    timezone_id="Europe/Moscow",
+                    extra_http_headers={
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+                        "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+                        "Upgrade-Insecure-Requests": "1"
+                    }
                 )
                 page = context.new_page()
                 
                 # Маскируем автоматизацию/webdriver
                 page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
                 
+                # Шаг 1: Переходим на главную страницу для получения первичных кук сессии и обхода WAF
+                root_url = "https://pub.fsa.gov.ru/"
+                log_message(f"Playwright: Переход на главную {root_url} для получения сессии...")
+                try:
+                    root_response = page.goto(root_url, wait_until="load", timeout=30000)
+                    root_status = root_response.status if root_response else "N/A"
+                    log_message(f"Playwright: Главная загружена. HTTP статус: {root_status}")
+                    time.sleep(3)
+                except Exception as e:
+                    log_message(f"Playwright: Предупреждение при загрузке главной страницы: {e}", "warning")
+                
+                # Шаг 2: Переходим на страницу реестра
                 log_message(f"Playwright: Переход на {url}...")
                 response = page.goto(url, wait_until="load", timeout=60000)
                 status = response.status if response else "N/A"
-                log_message(f"Playwright: Страница загружена. HTTP статус: {status}")
+                log_message(f"Playwright: Целевая страница загружена. HTTP статус: {status}")
                 
                 # Динамически ожидаем появления токена в localStorage и куки session-cookie
                 token = None
