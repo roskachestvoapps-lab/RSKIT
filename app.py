@@ -235,8 +235,8 @@ def load_config() -> dict:
                             config[k] = json.loads(val)
                         else:
                             config[k] = dict(val)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        log_message(f"Ошибка разбора словаря {k} из секретов: {e}. Значение типа {type(val)}: {repr(val)[:200]}", "warning")
                 else:
                     config[k] = st.secrets[k]
     except Exception:
