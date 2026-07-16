@@ -17,6 +17,7 @@ import glob
 import socket
 import platform
 import zipfile
+import subprocess
 
 
 # Настройка логирования
